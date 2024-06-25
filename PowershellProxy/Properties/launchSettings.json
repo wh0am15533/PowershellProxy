@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "PowershellProxy": {
+      "commandName": "Project",
+      "commandLineArgs": "D:\\PowershellProxy\\Test.ps1"
+    }
+  }
+}

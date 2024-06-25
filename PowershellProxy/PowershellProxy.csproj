@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <AssemblyName>Powershell</AssemblyName>
+    <StartupObject>PowershellProxy.Program</StartupObject>
+    <BaseOutputPath>..\bin\</BaseOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="DevNotes.cs" />
+    <Compile Remove="SingleInstance.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="DevNotes.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="TaskScheduler" Version="2.11.0" />
+  </ItemGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="xcopy &quot;C:\Users\jedga\Documents\Visual Studio 2017\Projects\PowershellProxy\bin\Release\net8.0-windows&quot; &quot;D:\PowershellProxy&quot; /E /H /C /I /Y" />
+  </Target>
+
+</Project>
