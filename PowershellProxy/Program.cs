@@ -16,7 +16,7 @@ namespace PowershellProxy
 
         private static string realPowershellPath = @"C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe";
         private static string logPath = $"{Environment.ProcessPath?.Replace("powershell.exe", "proxylog.txt")}";
-        //private static string logPath = Path.GetDirectoryName(Environment.ProcessPath) ?? string.Empty;
+        
 
 
         #endregion
@@ -167,11 +167,8 @@ namespace PowershellProxy
                 catch (Exception ex)
                 {
                     Console.WriteLine($"An error occurred: {ex.Message}");
-                    //LogError($"An error occurred: {ex.Message}");
                 }
 
-                // DEBUGGING - Exit Proxy
-                //Console.ReadLine();
             }
 
         }
@@ -246,7 +243,6 @@ namespace PowershellProxy
                                     // Check if the task arguments match the current arguments
                                     if (args.SequenceEqual(action.Arguments.Replace("\"", "").Split(' ')))
                                     {
-                                        //Console.WriteLine("MATCH");
                                         return $"{task.Name} [Sched. Task Folder: {task.Folder}]";
                                     }
                                 }
@@ -255,17 +251,13 @@ namespace PowershellProxy
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Error checking task {task.Name}: {ex.Message}");
+                        Console.WriteLine($"Error Checking Task: {task.Name} [Error: {ex.Message}]");
                     }
                 }
             }
 
             return string.Empty;
         }
-
-        
-
-
 
         static void LogDetails(string[] args, ProcessInfo parentProcessInfo)
         {
