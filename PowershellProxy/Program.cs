@@ -5,8 +5,8 @@ using System.Linq;
 using System.Management;
 using Microsoft.Win32.TaskScheduler;
 using System.Threading;
-
 using Microsoft.Win32;
+using System.Globalization;
 
 namespace PowershellProxy
 {
@@ -14,7 +14,7 @@ namespace PowershellProxy
     {
         #region[Declarations]
 
-        private static string realPowershellPath = @"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
+        private static string realPowershellPath = @"C:\Windows\System32\WindowsPowerShell\v1.0\Powershell.exe";
         private static string logPath = $"{Environment.ProcessPath?.Replace("powershell.exe", "proxylog.txt")}";
         //private static string logPath = Path.GetDirectoryName(Environment.ProcessPath) ?? string.Empty;
 
@@ -23,47 +23,157 @@ namespace PowershellProxy
 
         static void Main(string[] args)
         {
-            Console.WriteLine("Proxy Path: " + Environment.ProcessPath);
-            Console.WriteLine("Log Path: " + logPath);
-
-            //RegistryKey rootkey = Registry.CurrentUser.OpenSubKey("Software", true);
-
-
-            try
+            // Powershell Proxy install/uninstall
+            if (args[0].ToLower().Trim() == "-psproxyinstall" || args[0].ToLower().Trim() == "-psproxyremove")
             {
-                LogArgs(args);
-
-                ProcessInfo? parentProcessInfo = GetParentProcessInfo(args);
-
-                // Start the PowerShell process with the captured arguments
-                string arguments = string.Join(" ", args);
-                var startInfo = new ProcessStartInfo
+                // Set the environment PATH for powershell
+                try
                 {
-                    FileName = realPowershellPath,
-                    Arguments = arguments,
-                    UseShellExecute = true, // UseShellExecute must be true to start PowerShell independently
-                    CreateNoWindow = false
-                };
+                    string pathToPrepend = Path.GetDirectoryName(Environment.ProcessPath) ?? string.Empty;
+                    if (!string.IsNullOrEmpty(pathToPrepend))
+                    {
+                        // Set the updated User PATH environment variable
+                        string? currentUserPath = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User);
+                        string newUserPath = $"{pathToPrepend};{currentUserPath}";                    
+                        Environment.SetEnvironmentVariable("PATH", newUserPath, EnvironmentVariableTarget.User);
 
-                using (var process = new Process { StartInfo = startInfo })
+                        // Set the updated Machine PATH environment variable
+                        string? currentMachinePath = Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine);
+                        string newMachinePath = $"{pathToPrepend};{currentMachinePath}";
+                        Environment.SetEnvironmentVariable("PATH", newMachinePath, EnvironmentVariableTarget.Machine);
+                    }
+                }
+                catch (Exception e)
                 {
-                    process.Start();
-                    process.WaitForExit();
+                    Console.WriteLine($"Error setting Powershell Path: {e.Message}");
+                    Console.WriteLine(" ");
+                    Console.WriteLine("[Press any key to exit.]");
+                    Console.ReadLine();
+                    return;
                 }
 
-                if (parentProcessInfo != null) 
+                // Set the registry path for powershell
+                try 
                 {
-                    LogDetails(parentProcessInfo);
+                    RegistryKey? rootkey = Registry.LocalMachine.OpenSubKey("Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\PowerShell.exe", true);
+                    if (rootkey != null)
+                    {
+                        string? val = (rootkey.GetValue("") as string); // (Default)
+                        if (val != null)
+                        {
+#if !DEBUG
+                            string proxypath = Environment.ProcessPath ?? string.Empty;
+                            if (args[0].ToLower().Trim() == "-psproxyinstall" && val.ToLower() != proxypath.ToLower())
+                            {
+                                if (string.IsNullOrEmpty(proxypath)) 
+                                {
+                                    rootkey.SetValue("", realPowershellPath);
+                                    Console.WriteLine("Powershell Proxy NOT Installed.");
+                                }
+                                else
+                                {
+                                    rootkey.SetValue("", proxypath);
+                                    Console.WriteLine("Powershell Proxy Installed.");
+                                }
+                                
+                                rootkey.Close();
+                                rootkey.Dispose();                                
+                                Console.WriteLine(" ");
+                                Console.WriteLine("[Press any key to exit.]");
+                                Console.ReadLine();
+                                return;
+                            }
+                            else if (args[0].ToLower().Trim() == "-psproxyremove" && val.ToLower() == proxypath.ToLower())
+                            {
+                                // Since $PsHome uses another Reg key that's Restricted this should be the real path since we don't mod that key.
+                                var existingPsHome = Utils.GetPowerShellPathUsingPSHome();
+                                var defaultHome = realPowershellPath;
+                                if (!string.IsNullOrEmpty(existingPsHome)) { defaultHome = existingPsHome; }
+
+                                rootkey.SetValue("", defaultHome);
+                                rootkey.Close();
+                                rootkey.Dispose();
+                                Console.WriteLine("Powershell Proxy Uninstalled.");
+                                Console.WriteLine(" ");
+                                Console.WriteLine("[Press any key to exit.]");
+                                Console.ReadLine();
+                                return;
+                            }
+                            else
+                            {
+                                rootkey.Close();
+                                rootkey.Dispose();
+                                Console.WriteLine("[Press any key to exit.]");
+                                Console.ReadLine();
+                                return;
+                            }
+#endif
+                        }
+                        else
+                        {
+                            rootkey.Close();
+                            rootkey.Dispose();
+                            Console.WriteLine("[Press any key to exit.]");
+                            Console.ReadLine();
+                            return;
+                        }
+                    }                    
                 }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"Error setting Powershell registry: {e.Message}");
+                    Console.WriteLine(" ");
+                    Console.WriteLine("[Press any key to exit.]");
+                    Console.ReadLine();
+                    return;
+                }
+
             }
-            catch (Exception ex)
+            // List any scheduled tasks who's action path (application to run) contains specified keyword
+            else if (args[0].ToLower().Trim() == "-listtasks")
             {
-                Console.WriteLine($"An error occurred: {ex.Message}");
-                LogError($"An error occurred: {ex.Message}");
+                string keyword = "powershell.exe";
+                if (args.Length == 2 && !string.IsNullOrEmpty(args[1].Trim())) { keyword = args[1].ToLower().Trim(); }
+                Utils.PrintTasksByActionPathKeyword(keyword);
+                return;
+            }
+            // Start the real powershell.exe with original arguments
+            else
+            {
+                try
+                {
+                    ProcessInfo? parentProcessInfo = GetParentProcessInfo(args);
+
+                    string arguments = string.Join(" ", args);
+                    var startInfo = new ProcessStartInfo
+                    {
+                        FileName = realPowershellPath,
+                        Arguments = arguments,
+                        UseShellExecute = true, // UseShellExecute must be true to start PowerShell independently
+                        CreateNoWindow = false
+                    };
+
+                    using (var process = new Process { StartInfo = startInfo })
+                    {
+                        process.Start();
+                        //process.WaitForExit();
+                    }
+
+                    if (parentProcessInfo != null) 
+                    {
+                        LogDetails(args, parentProcessInfo);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"An error occurred: {ex.Message}");
+                    //LogError($"An error occurred: {ex.Message}");
+                }
+
+                // DEBUGGING - Exit Proxy
+                //Console.ReadLine();
             }
 
-            // [DEBUGGING] Exit Proxy
-            //Console.ReadLine();
         }
 
         static ProcessInfo? GetParentProcessInfo(string[] args)
@@ -155,21 +265,15 @@ namespace PowershellProxy
 
         
 
-        static void LogArgs(string[] args)
+
+
+        static void LogDetails(string[] args, ProcessInfo parentProcessInfo)
         {
             string logFilePath = logPath;
             using (StreamWriter writer = new StreamWriter(logFilePath, true))
             {
                 writer.WriteLine($"Timestamp: {DateTime.Now}");
                 writer.WriteLine("Arguments: " + string.Join(" ", args));
-            }
-        }
-
-        static void LogDetails(ProcessInfo parentProcessInfo)
-        {
-            string logFilePath = logPath;
-            using (StreamWriter writer = new StreamWriter(logFilePath, true))
-            {
                 writer.WriteLine($"Parent Process: {parentProcessInfo.ProcessName} (ID: {parentProcessInfo.ProcessId}) - {parentProcessInfo.ExecutablePath}");
                 if (!string.IsNullOrEmpty(parentProcessInfo.ServiceName))
                 {
